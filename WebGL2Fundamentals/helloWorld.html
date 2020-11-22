@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Title</title>
+
+    <script src="https://webgl2fundamentals.org/webgl/resources/webgl-utils.js"></script>
+    <script id="shader-vs" type="x-shader/x-vertex">
+        #version 300 es
+
+        // attribute는 버텍스 쉐이더에 대한 입력(in)입니다.
+        // 버퍼로부터 받은 데이터입니다.
+        in vec4 a_position;
+
+        // 모든 쉐이더는 main 함수를 가지고 있습니다.
+        void main() {
+
+          // gl_Position은 버텍스 쉐이더가 설정을 담당하는 내장 변수입니다.
+          gl_Position = a_position;
+        }
+    </script>
+    <script id="shader-fs" type="x-shader/x-fragment">
+        #version 300 es
+
+        // 프래그먼트 쉐이더는 기본 정밀도를 가지고 있지 않으므로 선언을 해야합니다.
+        // highp는 기본값으로 적당합니다. "높은 정밀도"를 의미합니다.
+        precision highp float;
+
+        // 프래그먼트 쉐이더(fragment shader)에서 출력을 선언 해야합니다.
+        out vec4 outColor;
+
+        void main() {
+            // 붉은-보라색으로 출력하게 설정합니다.
+            outColor = vec4(1, 0, 0.5, 1);
+        }
+    </script>
+
+</head>
+<body>
+<canvas id="canvas"></canvas>
+
+<script>
+
+    // 쉐이더를 컴파일 합니다.
+    function createShader(gl, type, source) {
+        var shader = gl.createShader(type);
+        gl.shaderSource(shader, source);
+        gl.compileShader(shader);
+        var success = gl.getShaderParameter(shader, gl.COMPILE_STATUS);
+        if (success) {
+            return shader;
+        }
+
+        console.log(gl.getShaderInfoLog(shader)); // eslint-disable-line
+        gl.deleteShader(shader);
+    }
+
+    // 두개의 쉐이더를 받아서 프로그램과 링크합니다.
+    function createProgram(gl, vertexShader, fragmentShader) {
+        var program = gl.createProgram();
+        gl.attachShader(program, vertexShader);
+        gl.attachShader(program, fragmentShader);
+        gl.linkProgram(program);
+        var success = gl.getProgramParameter(program, gl.LINK_STATUS);
+        if (success) {
+            return program;
+        }
+
+        console.log(gl.getProgramInfoLog(program)); // eslint-disable-line
+        gl.deleteProgram(program);
+    }
+
+    function init(){
+        var canvas = document.getElementById("canvas");
+
+        // WebGL2RenderingContext 생성
+        var gl = canvas.getContext("webgl2");
+        if (!gl) {
+            console.error('webgl2를 사용할수 없습니다!');
+            return;
+        }
+
+        var vertexShaderSource = document.getElementById("shader-vs").innerHTML.trim();
+        var fragmentShaderSource = document.getElementById("shader-fs").innerHTML.trim();
+
+        // 두개의 쉐더를 생성합니다.
+        var vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexShaderSource);
+        var fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentShaderSource);
+
+        // GPU에 GLSL 프로그램을 만듭니다.
+        var program = createProgram(gl, vertexShader, fragmentShader);
+
+        // WebGL API는 GLSL 프로그램에 데이터를 제공하도록 상태를 설정기 위해 존재한다.
+        // attribute인 a_position에 데이터를 입력하기 위해 attribute의 위치를 찾는다.
+        var positionAttributeLocation = gl.getAttribLocation(program, "a_position");
+        // attribute의 위치(또는 uniform 위치)를 찾는 것은 초기화 과정에서만 진행 하며, 렌더 루프(render loop)에서 해서는 안된다.
+
+        // Attributes는 버퍼에서 데이터를 가져오기 때문에 버퍼를 생성한다.
+        var positionBuffer = gl.createBuffer();
+
+        // 바인드 포인트를 이용하여, 리소스(positionBuffer)를 GPU에 바인드 한다. 그러면 WebGL의 모든 함수들이 바인드 포인트를 통해 해당 리소스를 참조한다.
+        gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+
+        // 세 개의 2d 점
+        var positions = [
+            0, 0,
+            0, 0.5,
+            0.7, 0,
+        ];
+        // WebGL은 엄격한 자료형을 요구 하기 때문에 positions를 Float32Array로 변환한다.
+        // gl.bufferData는 위에서 ARRAY_BUFFER에 바인드한 positionBuffer에 positions를 복사한다.
+        // gl.STATIC_DRAW는 WebGL에 데이터를 어떻게 사용 할 것인지에 대한 힌트이다. WebGL은 몇몇 사항들을 최적화하기 위해 이 힌트를 사용한다.
+        // gl.STATIC_DRAW는 데이터를 많이 변경 하지 않겠다는 의미이다.
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(positions), gl.STATIC_DRAW);
+
+        // 이제 attribute에게 데이터를 가져오는 방법을 알려준다.
+        // Vertex Array Object라고 불리는 attribute 상태 콜렉션을 생성해야합니다.
+        var vao = gl.createVertexArray();
+
+        // 모든 attribute 설정을 attribute 상태 콜렉션에 적용하기 위해서 현재 사용중인 버텍스 배열에 바인드한다..
+        gl.bindVertexArray(vao);
+
+        // 이제 마지막으로 버텍스 배열에 attribute를 설정한다.
+        // attribute를 작동시킨다. 이는 WebGL에게 버퍼에서 데이터를 가져오고 싶다고 알려주는 것이다. attributes을 작동 시키지 않으면 attributes는 상수 값을 가진다.
+        gl.enableVertexAttribArray(positionAttributeLocation);
+
+        // 데이터를 가져오는 방법을 지정.
+        var size = 2;          // 한번 실행할 때마다 2개 구성 요소 사용, 이 예제에서는 a_position의 attribute는 vec4이다 그러므로 x,y,z,w 값중 x,y 값만 가져오고 z,w는 기본값 0,1이 된다.
+        var type = gl.FLOAT;   // 데이터는 32비트 소수점
+        var normalize = false; // 정규화 되지 않은 데이터
+        var stride = 0;        // 0 은 실행할 때마다 `size * sizeof(type)`만큼 다음 위치로 이동.
+        var offset = 0;        // 버퍼의 첫 위치부터 시작
+        gl.vertexAttribPointer(positionAttributeLocation, size, type, normalize, stride, offset)
+        // 이로써 ARRAY_BUFFER는 attribute에 바인딩 되었다. 또 ARRAY_BUFFER는 positionBuffer에 바인딩 되어 있으므로 attribute는 positionBuffer에 바인드 되어 있다.
+
+        // canvas의 크기와 픽셀의 수를 일치 하기위해 유틸을 사용함.
+        webglUtils.resizeCanvasToDisplaySize(gl.canvas);
+
+        // WebGL에게 클립공간을 화면공간으로 불러 픽셀로 채우기 위해 캔버스 크기를 알려준다.
+        gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+        // 이렇게 하면 WebGL에 -1 ~ +1 클립 공간이 캔버스 크기로 변환되어 맵핑된다.
+
+        // 캔버스의 모든 색상을 지워 투명하게 만든다.
+        gl.clearColor(0, 0, 0, 0);
+        gl.clear(gl.COLOR_BUFFER_BIT);
+
+        // WebGL에 어떤 프로그램을 사용할지 알려준다.
+        gl.useProgram(program);
+
+        // attribute/buffer 집합을 바인드 하고, 해당 버퍼를 사용할것임을 알려준다.
+        // gl.bindVertexArray(vao);
+
+        // 이제 WebGL에 GLSL 프로그램을 실행하라고 요청한다.
+        var primitiveType = gl.TRIANGLES;
+        var offset = 0;
+        var count = 3; // 버텍스 쉐이더는 3번 실행 된다.
+        gl.drawArrays(primitiveType, offset, count);
+
+    }
+
+    init();
+</script>
+</body>
+</html>
